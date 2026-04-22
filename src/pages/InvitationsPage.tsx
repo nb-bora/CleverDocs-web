@@ -6,6 +6,11 @@ import { TableShell } from '../components/TableShell'
 import { toast } from '../components/Toast'
 import { ApiError } from '../lib/api'
 
+function clampToken(t: string) {
+  if (t.length <= 80) return t
+  return `${t.slice(0, 36)}…${t.slice(-36)}`
+}
+
 export function InvitationsPage() {
   const [email, setEmail] = useState('')
   const [role, setRole] = useState('member')
@@ -26,41 +31,49 @@ export function InvitationsPage() {
   })
 
   return (
-    <div className="grid gap-4">
+    <div className="grid gap-6">
       <div className="card-soft">
         <PageHeader
           title="Invitations"
           description="Créer et partager un token. (Le backend ne liste pas encore les invitations, donc on affiche le token créé.)"
         />
-        <div className="grid gap-3 md:grid-cols-3">
-          <div className="md:col-span-2">
-            <div className="label mb-1">Email</div>
-            <input className="input" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="user@exemple.com" />
+
+        <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+          <div className="grid gap-3 md:grid-cols-3">
+            <div className="md:col-span-2">
+              <div className="label mb-1">Email</div>
+              <input className="input" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="user@exemple.com" />
+            </div>
+            <div>
+              <div className="label mb-1">Rôle</div>
+              <select className="input" value={role} onChange={(e) => setRole(e.target.value)}>
+                <option value="member">member</option>
+                <option value="admin">admin</option>
+                <option value="reader">reader</option>
+              </select>
+            </div>
           </div>
-          <div>
-            <div className="label mb-1">Rôle</div>
-            <select className="input" value={role} onChange={(e) => setRole(e.target.value)}>
-              <option value="member">member</option>
-              <option value="admin">admin</option>
-              <option value="reader">reader</option>
-            </select>
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+            <div className="text-xs text-slate-500">
+              Le token donne accès à <code className="badge">/accept-invitation</code>.
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <button className="btn-primary" disabled={create.isPending || email.trim().length < 3} onClick={() => create.mutate()}>
+                {create.isPending ? 'Création…' : 'Créer invitation'}
+              </button>
+              {token ? (
+                <button
+                  className="btn-secondary"
+                  onClick={async () => {
+                    await navigator.clipboard.writeText(token)
+                    toast({ kind: 'success', title: 'Copié', message: 'Token copié dans le presse-papiers.' })
+                  }}
+                >
+                  Copier
+                </button>
+              ) : null}
+            </div>
           </div>
-        </div>
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          <button className="btn-primary" disabled={create.isPending || email.trim().length < 3} onClick={() => create.mutate()}>
-            {create.isPending ? 'Création…' : 'Créer invitation'}
-          </button>
-          {token ? (
-            <button
-              className="btn-ghost"
-              onClick={async () => {
-                await navigator.clipboard.writeText(token)
-                toast({ kind: 'success', title: 'Copié', message: 'Token copié dans le presse-papiers.' })
-              }}
-            >
-              Copier token
-            </button>
-          ) : null}
         </div>
       </div>
 
@@ -74,6 +87,21 @@ export function InvitationsPage() {
             <div className="text-xs text-slate-500">
               Note: pour révoquer via backend, il faut l’<code className="badge">invitation_id</code> (non exposé ici car l’API ne liste
               pas encore les invitations).
+            </div>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <button
+                className="btn-primary"
+                onClick={async () => {
+                  await navigator.clipboard.writeText(token)
+                  toast({ kind: 'success', title: 'Copié', message: 'Token copié dans le presse-papiers.' })
+                }}
+              >
+                Copier le token
+              </button>
+              <a className="btn-ghost" href="/accept-invitation" target="_blank" rel="noreferrer">
+                Ouvrir “Accept invitation”
+              </a>
+              <span className="badge">aperçu: {clampToken(token)}</span>
             </div>
           </div>
         ) : (

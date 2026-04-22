@@ -10,6 +10,24 @@ import { StatusBadge } from '../components/StatusBadge'
 import { toast } from '../components/Toast'
 import { ApiError, buildAuthHeaders } from '../lib/api'
 
+function clampFileLabel(name: string) {
+  if (name.length <= 42) return name
+  return `${name.slice(0, 22)}…${name.slice(-16)}`
+}
+
+function StatPill(props: Readonly<{ label: string; value: string; tone?: 'neutral' | 'good' | 'warn' }>) {
+  const tone = props.tone || 'neutral'
+  let toneCls = 'border-white/10 bg-white/5 text-slate-200'
+  if (tone === 'good') toneCls = 'border-emerald-400/20 bg-emerald-500/10 text-emerald-100'
+  if (tone === 'warn') toneCls = 'border-amber-400/20 bg-amber-500/10 text-amber-100'
+  return (
+    <div className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs ${toneCls}`}>
+      <span className="text-slate-400">{props.label}</span>
+      <span className="font-semibold tracking-tight">{props.value}</span>
+    </div>
+  )
+}
+
 function statusKind(s: string) {
   if (s === 'indexed') return 'success'
   if (s === 'processed') return 'info'
@@ -41,49 +59,108 @@ export function DocumentsPage() {
   })
 
   const items = useMemo(() => docsQ.data || [], [docsQ.data])
+  const stats = useMemo(() => {
+    const all = items.length
+    const archived = items.filter((d) => d.status === 'archived').length
+    const failed = items.filter((d) => (d.failed_reason || '').length > 0 || (d.status || '').includes('failed')).length
+    const pending = items.filter((d) => d.status === 'uploaded' || d.status === 'processing').length
+    return { all, archived, failed, pending }
+  }, [items])
 
   return (
-    <div className="grid gap-4">
+    <div className="grid gap-6">
       <div className="card-soft">
         <PageHeader
           title="Documents"
-          description="Liste, upload, versions, archive, OCR et indexation."
+          description="Upload, versions, archive, OCR et indexation — le centre de contrôle."
           actions={
-            <>
+            <div className="flex flex-wrap items-center justify-end gap-2">
               <Link className="btn-ghost" to="/app/search">
                 Recherche
               </Link>
-              <Link className="btn-ghost" to="/app/profile">
-                Profil
+              <Link className="btn-ghost" to="/app/jobs">
+                Jobs
               </Link>
-            </>
+            </div>
           }
         />
 
-        <div className="grid gap-3 lg:grid-cols-[1fr_auto_auto]">
-          <label className="inline-flex items-center gap-2 text-sm text-slate-300">
-            <input type="checkbox" checked={includeArchived} onChange={(e) => setIncludeArchived(e.target.checked)} />
-            Inclure les archivés
-          </label>
-          <input type="file" className="text-sm text-slate-300" onChange={(e) => setFile(e.target.files?.[0] || null)} />
-          <button className="btn-primary" disabled={!file || upload.isPending} onClick={() => upload.mutate()}>
-            {upload.isPending ? 'Upload…' : 'Uploader'}
-          </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <StatPill label="Total" value={String(stats.all)} />
+          <StatPill label="En attente" value={String(stats.pending)} tone={stats.pending > 0 ? 'warn' : 'neutral'} />
+          <StatPill label="Échecs" value={String(stats.failed)} tone={stats.failed > 0 ? 'warn' : 'neutral'} />
+          <StatPill label="Archivés" value={String(stats.archived)} />
+        </div>
+
+        <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="min-w-0">
+              <div className="text-sm font-semibold">Uploader un document</div>
+              <div className="mt-0.5 text-xs text-slate-500">
+                Le document sera ensuite OCR + indexé. Tu peux aussi ajouter une version à un document existant.
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="relative">
+                <input
+                  type="file"
+                  className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                  onChange={(e) => setFile(e.target.files?.[0] || null)}
+                />
+                <span className="btn-secondary">Choisir un fichier</span>
+              </label>
+              <button className="btn-primary" disabled={!file || upload.isPending} onClick={() => upload.mutate()}>
+                {upload.isPending ? 'Upload…' : 'Uploader'}
+              </button>
+            </div>
+          </div>
+          <div className="mt-2 text-xs text-slate-400">
+            {file ? (
+              <span>
+                Sélectionné: <span className="text-slate-200">{clampFileLabel(file.name)}</span>
+              </span>
+            ) : (
+              <span>Aucun fichier sélectionné</span>
+            )}
+          </div>
         </div>
       </div>
 
-      {docsQ.isLoading ? <div className="card-soft text-sm text-slate-400">Chargement…</div> : null}
-      {docsQ.isError ? <div className="card-soft text-sm text-red-300">Erreur /v1/documents</div> : null}
+      {docsQ.isLoading ? (
+        <div className="card-soft">
+          <div className="grid gap-2">
+            <div className="h-5 w-44 animate-pulse rounded bg-white/5" />
+            <div className="h-20 animate-pulse rounded-2xl bg-white/5" />
+            <div className="h-20 animate-pulse rounded-2xl bg-white/5" />
+            <div className="h-20 animate-pulse rounded-2xl bg-white/5" />
+          </div>
+        </div>
+      ) : null}
 
-      {docsQ.data && docsQ.data.length === 0 ? (
-        <EmptyState
-          title="Aucun document"
-          description="Uploade un document pour lancer OCR et indexation, puis utilise Recherche."
-        />
+      {docsQ.isError ? (
+        <div className="card-soft">
+          <div className="rounded-2xl border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-200">
+            Erreur lors du chargement de <code className="badge">/v1/documents</code>
+          </div>
+        </div>
+      ) : null}
+
+      {docsQ.data?.length === 0 ? (
+        <EmptyState title="Aucun document" description="Uploade un document, puis lance la recherche dans l’onglet Recherche." />
       ) : (
         <TableShell
           title="Liste"
-          hint="Actions: process/reindex, rename, archive, delete, download et upload version."
+          hint="Astuce: Télécharger via fetch (token), OCR / Reindex, archiver, renommer, supprimer, versionner."
+          right={
+            <label className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-2 text-xs text-slate-200">
+              <input
+                type="checkbox"
+                checked={includeArchived}
+                onChange={(e) => setIncludeArchived(e.target.checked)}
+                className="accent-indigo-400" />
+              <span>Inclure les archivés</span>
+            </label>
+          }
         >
           <div className="grid gap-2">
             {items.map((d) => (
@@ -96,7 +173,7 @@ export function DocumentsPage() {
   )
 }
 
-function DocumentRow(props: { doc: DocumentOut; onChanged: () => void }) {
+function DocumentRow(props: Readonly<{ doc: DocumentOut; onChanged: () => void }>) {
   const d = props.doc
   const [newName, setNewName] = useState(d.filename)
   const [versionFile, setVersionFile] = useState<File | null>(null)
@@ -157,32 +234,32 @@ function DocumentRow(props: { doc: DocumentOut; onChanged: () => void }) {
   })
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+    <div className="group rounded-2xl border border-white/10 bg-white/5 p-4 transition hover:border-white/15 hover:bg-white/[0.06]">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <div className="font-semibold">{d.filename}</div>
+            <div className="min-w-0 truncate text-sm font-semibold tracking-tight">{d.filename}</div>
             <StatusBadge kind={statusKind(d.status) as any}>{d.status}</StatusBadge>
-            {d.failed_reason ? <StatusBadge kind="danger">failed</StatusBadge> : null}
+            {d.failed_reason ? <StatusBadge kind="danger">échec</StatusBadge> : null}
           </div>
-          <div className="mt-1 text-xs text-slate-400">id: {d.id}</div>
-          {d.failed_reason ? <div className="mt-1 text-xs text-red-200">reason: {d.failed_reason}</div> : null}
+          <div className="mt-1 text-xs text-slate-500">
+            id: <span className="text-slate-400">{d.id}</span>
+          </div>
+          {d.failed_reason ? (
+            <div className="mt-2 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-200">
+              {d.failed_reason}
+            </div>
+          ) : null}
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <a
+          <button
             className="btn-ghost"
-            href={cleverdocs.downloadDocumentUrl(d.id)}
-            target="_blank"
-            rel="noreferrer"
-            onClick={(e) => {
-              // ensure auth headers are present -> open in same window won't include Authorization
-              // So we fallback to fetch+blob download when needed.
-              e.preventDefault()
+            onClick={() => {
               void (async () => {
                 const res = await fetch(cleverdocs.downloadDocumentUrl(d.id), { headers: buildAuthHeaders() })
                 if (!res.ok) {
-                  toast({ kind: 'error', title: 'Download', message: `Erreur (${res.status})` })
+                  toast({ kind: 'error', title: 'Téléchargement', message: `Erreur (${res.status})` })
                   return
                 }
                 const blob = await res.blob()
@@ -196,7 +273,7 @@ function DocumentRow(props: { doc: DocumentOut; onChanged: () => void }) {
             }}
           >
             Télécharger
-          </a>
+          </button>
           <button className="btn-ghost" disabled={process.isPending} onClick={() => process.mutate()}>
             OCR
           </button>
@@ -205,11 +282,11 @@ function DocumentRow(props: { doc: DocumentOut; onChanged: () => void }) {
           </button>
           {d.status === 'archived' ? (
             <button className="btn-ghost" disabled={unarchive.isPending} onClick={() => unarchive.mutate()}>
-              Unarchive
+              Désarchiver
             </button>
           ) : (
             <button className="btn-ghost" disabled={archive.isPending} onClick={() => archive.mutate()}>
-              Archive
+              Archiver
             </button>
           )}
           <ConfirmButton
@@ -225,17 +302,50 @@ function DocumentRow(props: { doc: DocumentOut; onChanged: () => void }) {
       </div>
 
       <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_auto]">
-        <input className="input" value={newName} onChange={(e) => setNewName(e.target.value)} />
-        <button className="btn-primary" disabled={rename.isPending || newName.trim().length < 1} onClick={() => rename.mutate()}>
-          Renommer
-        </button>
+        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+          <div className="text-xs font-semibold text-slate-300">Renommer</div>
+          <div className="mt-2 flex flex-col gap-2 md:flex-row md:items-center">
+            <input className="input" value={newName} onChange={(e) => setNewName(e.target.value)} />
+            <button
+              className="btn-primary"
+              disabled={rename.isPending || newName.trim().length < 1 || newName.trim() === d.filename.trim()}
+              onClick={() => rename.mutate()}
+            >
+              {rename.isPending ? '…' : 'Appliquer'}
+            </button>
+          </div>
+        </div>
       </div>
 
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        <input type="file" className="text-sm text-slate-300" onChange={(e) => setVersionFile(e.target.files?.[0] || null)} />
-        <button className="btn-ghost" disabled={!versionFile || addVersion.isPending} onClick={() => addVersion.mutate()}>
-          {addVersion.isPending ? '…' : 'Ajouter version'}
-        </button>
+      <div className="mt-3 rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="text-xs font-semibold text-slate-300">Ajouter une version</div>
+            <div className="mt-0.5 text-xs text-slate-500">Uploade un nouveau fichier pour remplacer le contenu.</div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="relative">
+              <input
+                type="file"
+                className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                onChange={(e) => setVersionFile(e.target.files?.[0] || null)}
+              />
+              <span className="btn-secondary">Choisir</span>
+            </label>
+            <button className="btn-ghost" disabled={!versionFile || addVersion.isPending} onClick={() => addVersion.mutate()}>
+              {addVersion.isPending ? 'Upload…' : 'Uploader version'}
+            </button>
+          </div>
+        </div>
+        <div className="mt-2 text-xs text-slate-400">
+          {versionFile ? (
+            <span>
+              Sélectionné: <span className="text-slate-200">{clampFileLabel(versionFile.name)}</span>
+            </span>
+          ) : (
+            <span>Aucun fichier sélectionné</span>
+          )}
+        </div>
       </div>
     </div>
   )
