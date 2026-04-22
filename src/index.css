@@ -1,0 +1,118 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Inspired by SIGIS token system, adapted to CleverDocs dark-first UI */
+    --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+
+    --background: 222 47% 8%;
+    --foreground: 210 22% 96%;
+
+    --card: 222 47% 11%;
+    --card-foreground: 210 22% 96%;
+
+    --muted: 217 33% 14%;
+    --muted-foreground: 215 20% 70%;
+
+    --primary: 217 91% 60%;
+    --primary-foreground: 222 47% 11%;
+
+    --border: 217 33% 20%;
+    --ring: 217 91% 60%;
+
+    color-scheme: dark;
+  }
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    @apply antialiased font-sans;
+    background: hsl(var(--background));
+    color: hsl(var(--foreground));
+    font-family: var(--font-sans);
+  }
+}
+
+@layer components {
+  .container-page {
+    @apply mx-auto w-full max-w-6xl px-4;
+  }
+  .app-surface {
+    @apply relative overflow-hidden;
+  }
+  .app-bg {
+    @apply pointer-events-none absolute inset-0;
+  }
+  .app-bg-grid {
+    @apply absolute inset-0 opacity-[0.45] [background-image:linear-gradient(to_right,rgba(255,255,255,0.06)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.06)_1px,transparent_1px)] [background-size:64px_64px];
+  }
+  .app-bg-halo-left {
+    @apply absolute -left-48 -top-52 h-[520px] w-[520px] rounded-full bg-indigo-500/10 blur-3xl;
+  }
+  .app-bg-halo-right {
+    @apply absolute -bottom-60 right-[-140px] h-[640px] w-[640px] rounded-full bg-sky-500/10 blur-3xl;
+  }
+  .app-bg-vignette {
+    @apply absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(255,255,255,0.07),transparent_55%)];
+  }
+  .card {
+    @apply rounded-2xl border p-5 shadow-lg shadow-black/20;
+    background: hsl(var(--card) / 0.55);
+    border-color: hsl(var(--border));
+  }
+  .card-soft {
+    @apply rounded-3xl border p-6 shadow-xl shadow-black/25 backdrop-blur;
+    background: hsl(var(--card) / 0.6);
+    border-color: hsl(var(--border));
+  }
+  .page-title {
+    @apply text-xl font-semibold tracking-tight;
+  }
+  .page-subtitle {
+    @apply mt-1 text-sm text-slate-400;
+  }
+  .page-actions {
+    @apply flex flex-wrap items-center justify-end gap-2;
+  }
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition;
+  }
+  .btn-primary {
+    @apply btn text-[hsl(var(--primary-foreground))];
+    background: hsl(var(--primary));
+  }
+  .btn-ghost {
+    @apply btn bg-white/0 text-slate-100 hover:bg-white/10 active:bg-white/15;
+  }
+  .btn-danger {
+    @apply btn bg-red-500/15 text-red-200 hover:bg-red-500/20 active:bg-red-500/25;
+  }
+  .input {
+    @apply w-full rounded-xl border px-3 py-2 text-sm outline-none ring-0;
+    background: hsl(var(--muted) / 0.65);
+    border-color: hsl(var(--border));
+    color: hsl(var(--foreground));
+  }
+  .input::placeholder {
+    color: hsl(var(--muted-foreground));
+  }
+  .input:focus {
+    border-color: hsl(var(--ring) / 0.7);
+  }
+  .label {
+    @apply text-sm text-slate-300;
+  }
+  .badge {
+    @apply inline-flex items-center rounded-full border px-2 py-0.5 text-xs;
+    background: hsl(var(--muted) / 0.55);
+    border-color: hsl(var(--border));
+    color: hsl(var(--foreground) / 0.9);
+  }
+  .link {
+    @apply text-indigo-300 hover:text-indigo-200 underline underline-offset-4;
+  }
+}
