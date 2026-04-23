@@ -45,16 +45,17 @@ export function DocumentsPage() {
   const [status, setStatus] = useState<'all' | 'active' | 'archived' | 'failed' | 'pending' | 'indexed'>('all')
   const [sort, setSort] = useState<'updated_desc' | 'created_desc' | 'name_asc'>('updated_desc')
   const qDebounced = useDebouncedValue(q.trim(), 250)
+  const meQ = useQuery({ queryKey: ['me'], queryFn: cleverdocs.me })
   const docsQ = useQuery({
     queryKey: ['documents', includeArchived, qDebounced, status, sort],
     queryFn: () =>
-      cleverdocs.listDocuments({
+      cleverdocs.listDocumentsMine({
         include_archived: includeArchived,
         q: qDebounced || undefined,
         sort,
         // We keep the richer "active/pending/failed" filtering client-side (status is coarse server-side).
         status: status === 'archived' ? 'archived' : undefined,
-        limit: 200,
+        limit: 500,
       }),
   })
 
@@ -113,6 +114,17 @@ export function DocumentsPage() {
     })
     return next
   }, [items, sort, status])
+
+  const grouped = useMemo(() => {
+    const by: Record<string, { orgId: string; orgName: string; docs: DocumentOut[] }> = {}
+    for (const d of filtered) {
+      const oid = d.organization_id || 'personal'
+      const name = d.organization_name || (d.organization_id ? `Organisation ${d.organization_id.slice(0, 8)}…` : 'Sans organisation')
+      if (!by[oid]) by[oid] = { orgId: oid, orgName: name, docs: [] }
+      by[oid].docs.push(d)
+    }
+    return Object.values(by).sort((a, b) => a.orgName.localeCompare(b.orgName))
+  }, [filtered])
   const stats = useMemo(() => {
     const all = items.length
     const archived = items.filter((d) => d.status === 'archived').length
@@ -195,68 +207,90 @@ export function DocumentsPage() {
         </div>
       ) : null}
 
-      {docsQ.data?.length === 0 ? (
-        <EmptyState title="Aucun document" description="Uploade un document, puis lance la recherche dans l’onglet Recherche." />
-      ) : (
-        <TableShell
-          right={
-            <div className="flex w-full flex-wrap items-center gap-2">
+      <TableShell
+        right={
+          <div className="flex w-full flex-wrap items-center gap-2">
+            <input
+              className="input w-[400px]"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Rechercher (nom)…"
+            />
+            <select className="input w-[220px]" value={status} onChange={(e) => setStatus(e.target.value as any)}>
+              <option value="all">Tous</option>
+              <option value="active">Actifs</option>
+              <option value="archived">Archivés</option>
+              <option value="indexed">Indexés</option>
+              <option value="pending">En attente</option>
+              <option value="failed">Échecs</option>
+            </select>
+            <select className="input w-[250px]" value={sort} onChange={(e) => setSort(e.target.value as any)}>
+              <option value="updated_desc">Tri: modifiés (récent)</option>
+              <option value="created_desc">Tri: créés (récent)</option>
+              <option value="name_asc">Tri: nom (A→Z)</option>
+            </select>
+            <label
+              className="inline-flex items-center gap-2 rounded-full border px-3 py-2 text-xs"
+              style={{
+                borderColor: 'hsl(var(--surface) / var(--divider-alpha))',
+                background: 'hsl(var(--surface) / var(--surface-alpha))',
+                color: 'hsl(var(--foreground))',
+              }}
+            >
               <input
-                className="input w-[400px]"
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-                placeholder="Rechercher (nom)…"
+                type="checkbox"
+                checked={includeArchived}
+                onChange={(e) => setIncludeArchived(e.target.checked)}
+                className="accent-indigo-500"
               />
-              <select className="input w-[220px]" value={status} onChange={(e) => setStatus(e.target.value as any)}>
-                <option value="all">Tous</option>
-                <option value="active">Actifs</option>
-                <option value="archived">Archivés</option>
-                <option value="indexed">Indexés</option>
-                <option value="pending">En attente</option>
-                <option value="failed">Échecs</option>
-              </select>
-              <select className="input w-[250px]" value={sort} onChange={(e) => setSort(e.target.value as any)}>
-                <option value="updated_desc">Tri: modifiés (récent)</option>
-                <option value="created_desc">Tri: créés (récent)</option>
-                <option value="name_asc">Tri: nom (A→Z)</option>
-              </select>
-              <label className="inline-flex items-center gap-2 rounded-full border px-3 py-2 text-xs"
-                style={{
-                  borderColor: 'hsl(var(--surface) / var(--divider-alpha))',
-                  background: 'hsl(var(--surface) / var(--surface-alpha))',
-                  color: 'hsl(var(--foreground))',
-                }}
-              >
-                <input
-                  type="checkbox"
-                  checked={includeArchived}
-                  onChange={(e) => setIncludeArchived(e.target.checked)}
-                  className="accent-indigo-500"
-                />
-                <span>Inclure archivés</span>
-              </label>
-            </div>
-          }
-        >
-          <div className="grid gap-2">
-            {filtered.map((d) => (
-              <DocumentRow key={d.id} doc={d} onChanged={() => docsQ.refetch()} />
-            ))}
-            {filtered.length === 0 ? (
+              <span>Inclure archivés</span>
+            </label>
+          </div>
+        }
+      >
+        {docsQ.data?.length === 0 ? (
+          <EmptyState title="Aucun document" description="Uploade un document, puis lance la recherche dans l’onglet Recherche." />
+        ) : (
+          <>
+            {grouped.length === 0 ? (
               <EmptyState
                 title="Aucun résultat"
                 description="Essaie un autre mot-clé, change le filtre statut, ou active “Inclure archivés”."
               />
-            ) : null}
-          </div>
-        </TableShell>
-      )}
+            ) : (
+              <div className="grid gap-4">
+                {grouped.map((g) => (
+                  <div key={g.orgId} className="rounded-3xl border border-white/10 bg-white/[0.02] p-3">
+                    <div className="mb-2 flex items-center justify-between gap-3 px-2">
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-semibold">{g.orgName}</div>
+                        <div className="mt-0.5 text-xs text-slate-500">{g.docs.length} document(s)</div>
+                      </div>
+                    </div>
+                    <div className="grid gap-2">
+                      {g.docs.map((d) => (
+                        <DocumentRow
+                          key={d.id}
+                          doc={d}
+                          meUserId={meQ.data?.user_id || null}
+                          onChanged={() => docsQ.refetch()}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+      </TableShell>
     </div>
   )
 }
 
-function DocumentRow(props: Readonly<{ doc: DocumentOut; onChanged: () => void }>) {
+function DocumentRow(props: Readonly<{ doc: DocumentOut; meUserId: string | null; onChanged: () => void }>) {
   const d = props.doc
+  const isUploader = Boolean(props.meUserId && d.uploaded_by_user_id && props.meUserId === d.uploaded_by_user_id)
 
   const archive = useMutation({
     mutationFn: async () => cleverdocs.archiveDocument(d.id),
@@ -346,31 +380,37 @@ function DocumentRow(props: Readonly<{ doc: DocumentOut; onChanged: () => void }
             >
               Télécharger
             </DropdownItem>
-            <DropdownItem disabled={process.isPending} onClick={() => process.mutate()}>
-              OCR
-            </DropdownItem>
+            {d.status === 'uploaded' || d.status === 'processing' ? (
+              <DropdownItem disabled={process.isPending} onClick={() => process.mutate()}>
+                OCR
+              </DropdownItem>
+            ) : null}
             <DropdownItem disabled={reindex.isPending} onClick={() => reindex.mutate()}>
               Reindex
             </DropdownItem>
-            {d.status === 'archived' ? (
-              <DropdownItem disabled={unarchive.isPending} onClick={() => unarchive.mutate()}>
-                Désarchiver
-              </DropdownItem>
-            ) : (
-              <DropdownItem disabled={archive.isPending} onClick={() => archive.mutate()}>
-                Archiver
-              </DropdownItem>
-            )}
+            {isUploader ? (
+              d.status === 'archived' ? (
+                <DropdownItem disabled={unarchive.isPending} onClick={() => unarchive.mutate()}>
+                  Désarchiver
+                </DropdownItem>
+              ) : (
+                <DropdownItem disabled={archive.isPending} onClick={() => archive.mutate()}>
+                  Archiver
+                </DropdownItem>
+              )
+            ) : null}
             <div className="my-1 h-px" style={{ background: 'hsl(var(--surface) / var(--divider-alpha))' }} />
-            <ConfirmButton
-              className="w-full rounded-xl px-3 py-2 text-left text-sm text-red-600 transition hover:bg-[hsl(var(--surface)/var(--surface-alpha))]"
-              confirmText="Supprimer ce document ?"
-              onConfirm={async () => {
-                await del.mutateAsync()
-              }}
-            >
-              Supprimer
-            </ConfirmButton>
+            {isUploader ? (
+              <ConfirmButton
+                className="w-full rounded-xl px-3 py-2 text-left text-sm text-red-600 transition hover:bg-[hsl(var(--surface)/var(--surface-alpha))]"
+                confirmText="Supprimer ce document ?"
+                onConfirm={async () => {
+                  await del.mutateAsync()
+                }}
+              >
+                Supprimer
+              </ConfirmButton>
+            ) : null}
           </DropdownMenu>
         </div>
       </div>

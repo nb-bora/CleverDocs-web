@@ -4,6 +4,8 @@ import { apiFetch, buildAuthHeaders, ApiError } from '../lib/api'
 export type DocumentOut = {
   id: string
   organization_id: string | null
+  organization_name?: string | null
+  uploaded_by_user_id?: string | null
   filename: string
   status: string
   storage_key: string
@@ -205,6 +207,15 @@ export const cleverdocs = {
     if (args.sort) qs.set('sort', args.sort)
     if (args.limit) qs.set('limit', String(args.limit))
     return apiFetch<DocumentOut[]>(`/v1/documents?${qs.toString()}`)
+  },
+  listDocumentsMine: (args: { include_archived: boolean; q?: string; status?: string; sort?: string; limit?: number }) => {
+    const qs = new URLSearchParams()
+    qs.set('include_archived', args.include_archived ? 'true' : 'false')
+    if (args.q) qs.set('q', args.q)
+    if (args.status) qs.set('status', args.status)
+    if (args.sort) qs.set('sort', args.sort)
+    if (args.limit) qs.set('limit', String(args.limit))
+    return apiFetch<DocumentOut[]>(`/v1/documents/mine?${qs.toString()}`)
   },
   uploadDocument: async (file: File) => {
     const fd = new FormData()
