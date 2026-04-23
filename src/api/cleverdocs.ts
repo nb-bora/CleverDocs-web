@@ -39,6 +39,7 @@ export type UserOut = {
 export type InvitationOut = {
   id: string
   organization_id: string
+  organization_name?: string | null
   email: string
   role: string
   status: string
@@ -149,6 +150,17 @@ export const cleverdocs = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, role }),
     }),
+  listReceivedInvitations: (args?: { status?: string; limit?: number; offset?: number }) => {
+    const qs = new URLSearchParams()
+    if (args?.status) qs.set('status', args.status)
+    if (args?.limit) qs.set('limit', String(args.limit))
+    if (args?.offset) qs.set('offset', String(args.offset))
+    const s = qs.toString()
+    const path = s ? `/v1/invitations/received?${s}` : '/v1/invitations/received'
+    return apiFetch<InvitationOut[]>(path)
+  },
+  issueInvitationToken: (invitationId: string) =>
+    apiFetch<CreateInvitationResponse>(`/v1/invitations/${invitationId}/token`, { method: 'POST' }),
   listInvitations: (args?: { status?: string; limit?: number; offset?: number }) => {
     const qs = new URLSearchParams()
     if (args?.status) qs.set('status', args.status)
