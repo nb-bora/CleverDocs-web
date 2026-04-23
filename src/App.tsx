@@ -5,14 +5,11 @@ import { AppLayout } from './layouts/AppLayout'
 import { AcceptInvitationPage } from './pages/AcceptInvitationPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { DocumentsPage } from './pages/DocumentsPage'
-import { HealthPage } from './pages/HealthPage'
 import { InvitationsPage } from './pages/InvitationsPage'
 import { LoginPage } from './pages/LoginPage'
-import { JobsPage } from './pages/JobsPage'
 import { OrganizationDetailPage } from './pages/OrganizationDetailPage'
 import { OrganizationsPage } from './pages/OrganizationsPage'
 import { ProfilePage } from './pages/ProfilePage'
-import { SearchPage } from './pages/SearchPage'
 
 function RequireAuth() {
   const loc = useLocation()
@@ -36,10 +33,7 @@ export default function App() {
             <Route path="/app/profile" element={<ProfilePage />} />
             <Route path="/app/organizations" element={<OrganizationsPage />} />
             <Route path="/app/organizations/:organizationId" element={<OrganizationDetailPage />} />
-            <Route path="/app/health" element={<HealthPage />} />
             <Route path="/app/documents" element={<DocumentsPage />} />
-            <Route path="/app/search" element={<SearchPage />} />
-            <Route path="/app/jobs" element={<JobsPage />} />
             <Route path="/app/invitations" element={<InvitationsPage />} />
           </Route>
         </Route>

@@ -16,7 +16,7 @@ function formatTimeFR(d: Date): string {
   return d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
 }
 
-function StatCard(props: { label: string; value: string; hint?: string; to: string }) {
+function StatCard(props: Readonly<{ label: string; value: string; hint?: string; to: string }>) {
   return (
     <Link
       to={props.to}
@@ -72,9 +72,7 @@ export function DashboardPage() {
           <div className="mt-1 text-xs text-slate-400">Cartes cliquables — accès direct aux modules.</div>
           <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <StatCard label="Documents" value="—" hint="Liste & upload" to="/app/documents" />
-            <StatCard label="Recherche" value="—" hint="Interroger l’index" to="/app/search" />
             <StatCard label="Organisations" value="—" hint="Membres & rôles" to="/app/organizations" />
-            <StatCard label="Jobs" value="—" hint="Relances & DLQ" to="/app/jobs" />
           </div>
         </div>
       </div>
@@ -91,22 +89,17 @@ export function DashboardPage() {
               <Link className="btn-primary" to="/app/documents">
                 Aller aux documents
               </Link>
-              <Link className="btn-ghost" to="/app/health">
-                Voir health
-              </Link>
             </div>
           </div>
         </div>
         <div className="card-soft">
-          <PageHeader title="Jobs par statut" description="Échecs, dead-letter (dead) et relances." />
+          <PageHeader title="Administration" description="Organisation, membres, invitations et supervision API." />
           <div className="rounded-2xl border border-white/10 bg-white/5 p-10 text-center">
-            <div className="text-sm font-semibold">Supervision simplifiée</div>
-            <div className="mt-1 text-sm text-slate-400">
-              Va dans Jobs pour voir la queue, relancer et traiter les “dead”.
-            </div>
+            <div className="text-sm font-semibold">Modules</div>
+            <div className="mt-1 text-sm text-slate-400">Accès direct à l’administration.</div>
             <div className="mt-4 flex justify-center gap-2">
-              <Link className="btn-primary" to="/app/jobs">
-                Aller aux jobs
+              <Link className="btn-primary" to="/app/organizations">
+                Organisations
               </Link>
               <Link className="btn-ghost" to="/app/invitations">
                 Invitations

@@ -1,113 +1,277 @@
-import { useState } from 'react'
-import { useMutation } from '@tanstack/react-query'
-import { cleverdocs } from '../api/cleverdocs'
+import { useMutation, useQuery } from '@tanstack/react-query'
+import { useEffect, useMemo, useState } from 'react'
+import { cleverdocs, type InvitationOut, type UserOut } from '../api/cleverdocs'
+import { ConfirmButton } from '../components/ConfirmButton'
+import { DropdownItem, DropdownMenu } from '../components/DropdownMenu'
+import { EmptyState } from '../components/EmptyState'
 import { PageHeader } from '../components/PageHeader'
 import { TableShell } from '../components/TableShell'
 import { toast } from '../components/Toast'
 import { ApiError } from '../lib/api'
+import { authStore } from '../lib/authStore'
+import { useDebouncedValue } from '../lib/useDebouncedValue'
 
-function clampToken(t: string) {
-  if (t.length <= 80) return t
-  return `${t.slice(0, 36)}…${t.slice(-36)}`
+function isEmailLike(v: string) {
+  const s = v.trim().toLowerCase()
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s)
 }
 
 export function InvitationsPage() {
-  const [email, setEmail] = useState('')
-  const [role, setRole] = useState('member')
-  const [token, setToken] = useState<string | null>(null)
+  const [query, setQuery] = useState('')
+  const debounced = useDebouncedValue(query.trim(), 150)
+  const [role, setRole] = useState<'member' | 'admin' | 'reader'>('member')
+  const [selectedUser, setSelectedUser] = useState<UserOut | null>(null)
+  const [statusFilter, setStatusFilter] = useState<'pending' | 'accepted' | 'expired' | 'revoked' | 'declined'>('pending')
+  const orgId = authStore.get().orgId
 
-  const create = useMutation({
-    mutationFn: async () => cleverdocs.createInvitation(email.trim().toLowerCase(), role),
-    onSuccess: (r: any) => {
-      setToken(r.token)
-      toast({ kind: 'success', title: 'Invitation créée', message: r.invitation.email })
-    },
-    onError: (e: unknown) =>
-      toast({
-        kind: 'error',
-        title: 'Create invitation',
-        message: e instanceof ApiError ? `Erreur (${e.status})` : 'Erreur',
-      }),
+  const isEmail = useMemo(() => isEmailLike(query), [query])
+
+  const orgsQ = useQuery({
+    queryKey: ['orgs.mine'],
+    queryFn: cleverdocs.listMyOrganizations,
+    enabled: !orgId,
   })
 
+  useEffect(() => {
+    if (orgId) return
+    const first = orgsQ.data?.[0]
+    if (first?.id) authStore.setOrgId(first.id)
+  }, [orgId, orgsQ.data])
+
+  const directoryQ = useQuery({
+    queryKey: ['users.directory', debounced],
+    queryFn: async () => cleverdocs.directory(debounced, 8),
+    enabled: debounced.length >= 1 && !isEmail && !selectedUser,
+  })
+
+  const invitationsQ = useQuery({
+    queryKey: ['invitations', statusFilter],
+    queryFn: async () => cleverdocs.listInvitations({ status: statusFilter, limit: 100 }),
+  })
+
+  const inviteByEmail = useMutation({
+    mutationFn: async () => {
+      const email = (selectedUser?.email || query).trim().toLowerCase()
+      return cleverdocs.createInvitation(email, role)
+    },
+    onSuccess: async (r) => {
+      const link = `${globalThis.location.origin}${r.accept_url}`
+      await navigator.clipboard.writeText(link)
+      toast({ kind: 'success', title: 'Invitation créée', message: 'Lien copié dans le presse-papiers.' })
+      setSelectedUser(null)
+      setQuery('')
+      invitationsQ.refetch()
+    },
+    onError: (e: unknown) => {
+      const detail = e instanceof ApiError ? e.detail : null
+      const code = detail && typeof detail === 'object' && 'detail' in detail ? (detail as any).detail : detail
+      if (code === 'INVITATION_ALREADY_PENDING') {
+        toast({ kind: 'error', title: 'Invitation', message: 'Une invitation est déjà en attente pour cet email.' })
+        return
+      }
+      if (code === 'SELF_INVITE_FORBIDDEN') {
+        toast({ kind: 'error', title: 'Invitation', message: 'Tu ne peux pas t’inviter toi‑même.' })
+        return
+      }
+      toast({ kind: 'error', title: 'Invitation', message: e instanceof ApiError ? `Erreur (${e.status})` : 'Erreur' })
+    },
+  })
+
+  const revoke = useMutation({
+    mutationFn: async (invitationId: string) => cleverdocs.revokeInvitation(invitationId),
+    onSuccess: () => invitationsQ.refetch(),
+    onError: (e) => toast({ kind: 'error', title: 'Révoquer', message: e instanceof ApiError ? `Erreur (${e.status})` : 'Erreur' }),
+  })
+
+  const resend = useMutation({
+    mutationFn: async (invitationId: string) => cleverdocs.resendInvitation(invitationId),
+    onSuccess: async (r) => {
+      const link = `${globalThis.location.origin}${r.accept_url}`
+      await navigator.clipboard.writeText(link)
+      toast({ kind: 'success', title: 'Lien régénéré', message: 'Lien copié dans le presse-papiers.' })
+      invitationsQ.refetch()
+    },
+    onError: (e) => toast({ kind: 'error', title: 'Renvoyer', message: e instanceof ApiError ? `Erreur (${e.status})` : 'Erreur' }),
+  })
+
+  const canInvite = selectedUser != null || isEmail
+
+  const suggestions = (directoryQ.data || []).filter((u) => u.id !== selectedUser?.id)
+
+  const renderInvRow = (inv: InvitationOut) => (
+    <div key={inv.id} className="grid items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-3 md:grid-cols-[1.6fr_.7fr_.8fr_auto]">
+      <div className="min-w-0">
+        <div className="truncate text-sm font-semibold">{inv.email}</div>
+        <div className="mt-0.5 flex flex-wrap gap-2 text-xs text-slate-500">
+          <span className="badge">{inv.role}</span>
+          <span className="badge">{inv.status}</span>
+          {inv.expires_at ? <span className="badge">expire: {new Date(inv.expires_at).toLocaleString()}</span> : null}
+        </div>
+      </div>
+      <div className="text-xs text-slate-500">
+        {inv.created_at ? <span>créée: {new Date(inv.created_at).toLocaleString()}</span> : <span>—</span>}
+      </div>
+      <div className="text-xs text-slate-500">{inv.created_by_user_id ? <span>par: {inv.created_by_user_id}</span> : <span />}</div>
+      <div className="flex justify-end gap-2">
+        <ConfirmButton
+          className="btn-secondary"
+          confirmText="Régénérer un lien d’invitation ? (l’ancien lien ne fonctionnera plus)"
+          onConfirm={async () => {
+            await resend.mutateAsync(inv.id)
+          }}
+        >
+          Copier lien
+        </ConfirmButton>
+        <DropdownMenu label="Actions" buttonClassName="btn-ghost" align="right">
+          <DropdownItem
+            onClick={() => {
+              resend.mutate(inv.id)
+            }}
+          >
+            Renvoyer / régénérer
+          </DropdownItem>
+          <DropdownItem
+            tone="danger"
+            onClick={() => {
+              revoke.mutate(inv.id)
+            }}
+          >
+            Révoquer
+          </DropdownItem>
+        </DropdownMenu>
+      </div>
+    </div>
+  )
+
   return (
-    <div className="grid gap-6">
-      <div className="card-soft">
+    <div className="grid gap-6 isolate">
+      <div className="card-soft relative z-20">
         <PageHeader
           title="Invitations"
-          description="Créer et partager un token. (Le backend ne liste pas encore les invitations, donc on affiche le token créé.)"
+          description="Invite des personnes comme sur GitHub/Slack: recherche, invitation en 1 clic, suivi et actions (copier lien, révoquer, renvoyer)."
         />
 
         <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-          <div className="grid gap-3 md:grid-cols-3">
-            <div className="md:col-span-2">
-              <div className="label mb-1">Email</div>
-              <input className="input" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="user@exemple.com" />
+          <div className="grid gap-3 md:grid-cols-[1fr_220px_auto] md:items-end">
+            <div className="relative">
+              <div className="label mb-1">Inviter</div>
+              {selectedUser ? (
+                <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+                  <span className="badge">@{selectedUser.username || selectedUser.email}</span>
+                  <span className="text-xs text-slate-400">{selectedUser.email}</span>
+                  <button className="btn-ghost ml-auto" onClick={() => setSelectedUser(null)}>
+                    Changer
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <input
+                    className="input"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    placeholder="Tape un @username, un nom, ou un email…"
+                    autoComplete="off"
+                    spellCheck={false}
+                  />
+                  {debounced && !isEmail && suggestions.length > 0 ? (
+                    <div className="absolute z-50 mt-2 w-full overflow-auto rounded-2xl border border-white/10 bg-[hsl(var(--soft-bg)/0.98)] shadow-2xl max-h-80">
+                      {suggestions.map((u) => (
+                        <button
+                          key={u.id}
+                          type="button"
+                          className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm transition hover:bg-white/5"
+                          onClick={() => {
+                            setSelectedUser(u)
+                            setQuery('')
+                          }}
+                        >
+                          <div className="min-w-0">
+                            <div className="truncate font-semibold">{u.username ? `@${u.username}` : u.email}</div>
+                            <div className="truncate text-xs text-slate-400">{u.display_name || u.email}</div>
+                          </div>
+                          <span className="badge">{u.status}</span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                  {debounced && !isEmail && directoryQ.isFetching ? (
+                    <div className="mt-2 text-xs text-slate-500">Recherche…</div>
+                  ) : null}
+                  {debounced && !isEmail && directoryQ.isError ? (
+                    <div className="mt-2 text-xs text-amber-200/90">
+                      {directoryQ.error instanceof ApiError && directoryQ.error.status === 403
+                        ? 'Droits insuffisants: seuls les admins peuvent inviter des utilisateurs.'
+                        : 'Impossible de charger l’annuaire.'}
+                    </div>
+                  ) : null}
+                </>
+              )}
             </div>
+
             <div>
               <div className="label mb-1">Rôle</div>
-              <select className="input" value={role} onChange={(e) => setRole(e.target.value)}>
+              <select className="input" value={role} onChange={(e) => setRole(e.target.value as any)}>
                 <option value="member">member</option>
                 <option value="admin">admin</option>
                 <option value="reader">reader</option>
               </select>
             </div>
-          </div>
-          <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-            <div className="text-xs text-slate-500">
-              Le token donne accès à <code className="badge">/accept-invitation</code>.
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <button className="btn-primary" disabled={create.isPending || email.trim().length < 3} onClick={() => create.mutate()}>
-                {create.isPending ? 'Création…' : 'Créer invitation'}
+
+            <div className="flex gap-2">
+              <button
+                className="btn-primary"
+                disabled={
+                  !canInvite ||
+                  inviteByEmail.isPending ||
+                  (!isEmail && selectedUser == null)
+                }
+                onClick={() => {
+                  inviteByEmail.mutate()
+                }}
+              >
+                {inviteByEmail.isPending ? 'Invitation…' : 'Inviter'}
               </button>
-              {token ? (
-                <button
-                  className="btn-secondary"
-                  onClick={async () => {
-                    await navigator.clipboard.writeText(token)
-                    toast({ kind: 'success', title: 'Copié', message: 'Token copié dans le presse-papiers.' })
-                  }}
-                >
-                  Copier
-                </button>
-              ) : null}
             </div>
+          </div>
+
+          <div className="mt-3 text-xs text-slate-500">
+            Pour les invitations par email, un lien d’acceptation est généré et copié automatiquement.
           </div>
         </div>
       </div>
 
-      <TableShell title="Token" hint="À fournir à l’utilisateur (page Accept invitation).">
-        {token ? (
-          <div className="grid gap-2">
-            <div className="rounded-2xl border border-white/10 bg-black/30 p-4 text-xs text-slate-200 break-all">{token}</div>
-            <div className="text-xs text-slate-400">
-              L’utilisateur doit aller sur <code className="badge">/accept-invitation</code> et coller ce token.
-            </div>
-            <div className="text-xs text-slate-500">
-              Note: pour révoquer via backend, il faut l’<code className="badge">invitation_id</code> (non exposé ici car l’API ne liste
-              pas encore les invitations).
-            </div>
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              <button
-                className="btn-primary"
-                onClick={async () => {
-                  await navigator.clipboard.writeText(token)
-                  toast({ kind: 'success', title: 'Copié', message: 'Token copié dans le presse-papiers.' })
-                }}
-              >
-                Copier le token
+      <div className="relative z-0">
+        <TableShell
+          title="Invitations"
+          hint="Suivi des invitations. Pour copier un lien, on régénère un lien (sécurisé) et on le copie."
+          right={
+            <div className="flex items-center gap-2">
+              <select className="input" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as any)}>
+                <option value="pending">pending</option>
+                <option value="accepted">accepted</option>
+                <option value="expired">expired</option>
+                <option value="revoked">revoked</option>
+              </select>
+              <button className="btn-ghost" onClick={() => invitationsQ.refetch()}>
+                Rafraîchir
               </button>
-              <a className="btn-ghost" href="/accept-invitation" target="_blank" rel="noreferrer">
-                Ouvrir “Accept invitation”
-              </a>
-              <span className="badge">aperçu: {clampToken(token)}</span>
             </div>
-          </div>
-        ) : (
-          <div className="text-sm text-slate-400">Crée une invitation pour afficher un token.</div>
-        )}
-      </TableShell>
+          }
+        >
+          {invitationsQ.isLoading ? <div className="text-sm text-slate-400">Chargement…</div> : null}
+          {invitationsQ.isError ? (
+            <div className="rounded-2xl border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-200">
+              Impossible de charger les invitations.
+            </div>
+          ) : null}
+          {invitationsQ.data && invitationsQ.data.length === 0 ? (
+            <EmptyState title="Aucune invitation" description="Crée une invitation pour la voir apparaître ici." />
+          ) : null}
+          {invitationsQ.data && invitationsQ.data.length > 0 ? (
+            <div className="grid gap-2">{invitationsQ.data.map(renderInvRow)}</div>
+          ) : null}
+        </TableShell>
+      </div>
     </div>
   )
 }

@@ -1,14 +1,20 @@
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { cleverdocs } from '../api/cleverdocs'
 import { ConfirmButton } from '../components/ConfirmButton'
 import { toast } from '../components/Toast'
 import { ApiError } from '../lib/api'
+import { authStore } from '../lib/authStore'
 
 export function OrganizationDetailPage() {
   const { organizationId } = useParams()
   if (!organizationId) return null
+
+  useEffect(() => {
+    const cur = authStore.get().orgId
+    if (cur !== organizationId) authStore.setOrgId(organizationId)
+  }, [organizationId])
 
   const orgQ = useQuery({ queryKey: ['org', organizationId], queryFn: () => cleverdocs.getOrganization(organizationId) })
   const membersQ = useQuery({
@@ -31,7 +37,7 @@ export function OrganizationDetailPage() {
   })
 
   const addMember = useMutation({
-    mutationFn: async () => cleverdocs.addMember(organizationId, inviteEmail.trim().toLowerCase(), inviteRole),
+    mutationFn: async () => cleverdocs.addMember(organizationId, { user_email: inviteEmail.trim().toLowerCase(), role: inviteRole }),
     onSuccess: () => {
       toast({ kind: 'success', title: 'Membre ajouté' })
       setInviteEmail('')

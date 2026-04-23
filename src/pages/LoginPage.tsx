@@ -1,9 +1,9 @@
 import { useState } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { useLocation } from 'react-router-dom'
 import { apiLogin, ApiError } from '../lib/api'
 import { toast } from '../components/Toast'
 
-function IconMail(props: { className?: string }) {
+function IconMail(props: Readonly<{ className?: string }>) {
   return (
     <svg viewBox="0 0 24 24" className={props.className} fill="none" aria-hidden="true">
       <path
@@ -22,7 +22,7 @@ function IconMail(props: { className?: string }) {
   )
 }
 
-function IconLock(props: { className?: string }) {
+function IconLock(props: Readonly<{ className?: string }>) {
   return (
     <svg viewBox="0 0 24 24" className={props.className} fill="none" aria-hidden="true">
       <path
@@ -40,7 +40,7 @@ function IconLock(props: { className?: string }) {
   )
 }
 
-function IconEye(props: { className?: string }) {
+function IconEye(props: Readonly<{ className?: string }>) {
   return (
     <svg viewBox="0 0 24 24" className={props.className} fill="none" aria-hidden="true">
       <path
@@ -60,7 +60,7 @@ function IconEye(props: { className?: string }) {
 
 export function LoginPage() {
   const loc = useLocation()
-  const from = (loc.state as any)?.from || '/app'
+  const from = (loc.state as { from?: string } | null | undefined)?.from || '/app'
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -83,18 +83,11 @@ export function LoginPage() {
         <div className="w-full max-w-md">
           {/* brand header (like reference) */}
           <div className="mb-6 text-center">
-            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-indigo-500/15 ring-1 ring-indigo-400/25 shadow-lg shadow-black/20">
-              <svg viewBox="0 0 24 24" className="h-7 w-7 text-indigo-200" fill="none" aria-hidden="true">
-                <path
-                  d="M12 2.5 19 6v7.2c0 4.2-3 7.7-7 8.8-4-1.1-7-4.6-7-8.8V6l7-3.5Z"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinejoin="round"
-                />
-              </svg>
+            <div className="mx-auto flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl bg-white/5 ring-1 ring-white/10 shadow-lg shadow-black/20">
+              <img src="/logo.png" alt="CleverDocs" className="h-10 w-10 object-contain" />
             </div>
             <div className="mt-3 text-xl font-semibold tracking-tight text-slate-100">CleverDocs</div>
-            <div className="mt-1 text-sm text-slate-300/80">Recherche documentaire multi-organisation</div>
+            <div className="mt-1 text-sm text-slate-300/80">Système d'archivage multi-organisation</div>
           </div>
 
           <div className="rounded-3xl border border-white/10 bg-white/7 p-6 shadow-xl shadow-black/25 backdrop-blur">
@@ -172,7 +165,7 @@ export function LoginPage() {
                     setBusy(true)
                     await apiLogin(email.trim().toLowerCase(), password)
                     toast({ kind: 'success', title: 'Connecté', message: 'Bienvenue.' })
-                    window.location.assign(from)
+                    globalThis.location.assign(from)
                   } catch (e) {
                     if (e instanceof ApiError) {
                       setError(`Erreur (${e.status}). Vérifie tes identifiants.`)
@@ -186,20 +179,7 @@ export function LoginPage() {
               >
                 {busy ? 'Connexion…' : 'Se connecter'}
               </button>
-
-              <div className="text-center text-xs text-slate-400">
-                Pas encore invité ?{' '}
-                <Link className="link" to="/accept-invitation">
-                  Accepter une invitation
-                </Link>
-                .
-              </div>
             </div>
-          </div>
-
-          <div className="mt-6 text-center text-[11px] text-slate-400/70">
-            Base API:{' '}
-            <code className="badge">{import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000'}</code>
           </div>
         </div>
       </div>

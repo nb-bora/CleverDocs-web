@@ -1,11 +1,11 @@
-import { useMutation } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { useMemo, useState } from 'react'
 import { cleverdocs } from '../api/cleverdocs'
 import { EmptyState } from '../components/EmptyState'
 import { PageHeader } from '../components/PageHeader'
 import { TableShell } from '../components/TableShell'
-import { toast } from '../components/Toast'
 import { ApiError } from '../lib/api'
+import { useDebouncedValue } from '../lib/useDebouncedValue'
 
 function StatPill(props: Readonly<{ label: string; value: string; tone?: 'neutral' | 'good' | 'warn' }>) {
   const tone = props.tone || 'neutral'
@@ -24,10 +24,17 @@ export function SearchPage() {
   const [q, setQ] = useState('')
   const [mode, setMode] = useState<'org' | 'mine'>('org')
 
-  const search = useMutation({
-    mutationFn: async () => (mode === 'mine' ? cleverdocs.searchMine(q.trim()) : cleverdocs.search(q.trim())),
-    onError: (e) => toast({ kind: 'error', title: 'Search', message: e instanceof ApiError ? `Erreur (${e.status})` : 'Erreur' }),
+  const trimmed = useMemo(() => q.trim(), [q])
+  const debounced = useDebouncedValue(trimmed, 280)
+
+  const searchQ = useQuery({
+    queryKey: ['search', mode, debounced],
+    enabled: debounced.length >= 1,
+    queryFn: async () => (mode === 'mine' ? cleverdocs.searchMine(debounced) : cleverdocs.search(debounced)),
+    retry: false,
   })
+
+  const resultsCount = searchQ.data ? String(searchQ.data.results.length) : '—'
 
   return (
     <div className="grid gap-6">
@@ -41,8 +48,8 @@ export function SearchPage() {
           <StatPill label="Mode" value={mode === 'org' ? 'Organisation' : 'Mes docs'} />
           <StatPill
             label="Résultats"
-            value={search.data ? String(search.data.results.length) : '—'}
-            tone={search.data && search.data.results.length > 0 ? 'good' : 'neutral'}
+            value={resultsCount}
+            tone={searchQ.data && searchQ.data.results.length > 0 ? 'good' : 'neutral'}
           />
         </div>
 
@@ -53,16 +60,17 @@ export function SearchPage() {
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="Mots-clés… (ex: facture, pharmacie, index)"
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && q.trim().length >= 1 && !search.isPending) search.mutate()
-              }}
             />
             <select className="input md:w-[240px]" value={mode} onChange={(e) => setMode(e.target.value as any)}>
               <option value="org">Dans l’organisation</option>
               <option value="mine">Mes docs (toutes orgs)</option>
             </select>
-            <button className="btn-primary" disabled={search.isPending || q.trim().length < 1} onClick={() => search.mutate()}>
-              {search.isPending ? 'Recherche…' : 'Rechercher'}
+            <button
+              className="btn-primary"
+              disabled={searchQ.isFetching || trimmed.length < 1}
+              onClick={() => searchQ.refetch()}
+            >
+              {searchQ.isFetching ? 'Recherche…' : 'Rechercher'}
             </button>
           </div>
           <div className="mt-2 text-xs text-slate-500">
@@ -76,20 +84,27 @@ export function SearchPage() {
               </span>
             )}
           </div>
+          {searchQ.isError ? (
+            <div className="mt-3 rounded-2xl border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-200">
+              {searchQ.error instanceof ApiError ? `Erreur (${searchQ.error.status})` : 'Erreur'}
+            </div>
+          ) : null}
         </div>
       </div>
 
       <TableShell title="Résultats" hint="Top 25 résultats (OpenSearch si dispo, sinon fallback SQL/FTS).">
-        {search.isPending ? (
+        {searchQ.isFetching ? (
           <div className="grid gap-2">
             <div className="h-20 animate-pulse rounded-2xl bg-white/5" />
             <div className="h-20 animate-pulse rounded-2xl bg-white/5" />
             <div className="h-20 animate-pulse rounded-2xl bg-white/5" />
           </div>
         ) : null}
-        {search.data ? (
+        {trimmed.length < 1 ? (
+          <div className="text-sm text-slate-400">Commence à taper pour lancer la recherche.</div>
+        ) : searchQ.data ? (
           <div className="grid gap-2">
-            {search.data.results.map((r) => (
+            {searchQ.data.results.map((r) => (
               <div
                 key={r.document_id}
                 className="group rounded-2xl border border-white/10 bg-white/5 p-4 transition hover:border-white/15 hover:bg-white/[0.06]"
@@ -110,13 +125,11 @@ export function SearchPage() {
                 )}
               </div>
             ))}
-            {search.data.results.length === 0 ? (
+            {searchQ.data.results.length === 0 ? (
               <EmptyState title="Aucun résultat" description="Essaie d’autres mots-clés ou change de scope (Organisation / Mes docs)." />
             ) : null}
           </div>
-        ) : (
-          <div className="text-sm text-slate-400">Lance une recherche pour afficher des résultats.</div>
-        )}
+        ) : null}
       </TableShell>
     </div>
   )

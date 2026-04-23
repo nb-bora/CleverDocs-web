@@ -7,6 +7,41 @@
     /* Inspired by SIGIS token system, adapted to CleverDocs dark-first UI */
     --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
 
+    /* Light (default) — clean, “SaaS” professional */
+    --background: 220 33% 98%;
+    --foreground: 222 47% 11%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+
+    --muted: 220 22% 95%;
+    --muted-foreground: 215 18% 38%;
+
+    --primary: 221 83% 53%;
+    --primary-foreground: 0 0% 100%;
+
+    --border: 216 22% 88%;
+    --ring: 221 83% 53%;
+
+    --grid-line: 0 0% 0%;
+    --grid-alpha: 0.045;
+    --halo-indigo: 217 91% 60%;
+    --halo-sky: 199 89% 55%;
+
+    --elev-1: 0 1px 0 hsl(0 0% 0% / 0.04), 0 10px 30px hsl(0 0% 0% / 0.08);
+    --elev-2: 0 1px 0 hsl(0 0% 0% / 0.04), 0 24px 70px hsl(0 0% 0% / 0.12);
+
+    --soft-bg: 0 0% 100%;
+    --soft-alpha: 0.82;
+    --surface: 222 22% 12%;
+    --surface-alpha: 0.035;
+    --surface-alpha-strong: 0.06;
+    --divider-alpha: 0.08;
+
+    color-scheme: light;
+  }
+
+  html[data-theme='dark'] {
     --background: 222 47% 8%;
     --foreground: 210 22% 96%;
 
@@ -21,6 +56,21 @@
 
     --border: 217 33% 20%;
     --ring: 217 91% 60%;
+
+    --grid-line: 0 0% 100%;
+    --grid-alpha: 0.06;
+    --halo-indigo: 217 91% 60%;
+    --halo-sky: 199 89% 55%;
+
+    --elev-1: 0 16px 50px hsl(0 0% 0% / 0.25);
+    --elev-2: 0 24px 60px hsl(0 0% 0% / 0.32);
+
+    --soft-bg: 222 47% 11%;
+    --soft-alpha: 0.72;
+    --surface: 0 0% 100%;
+    --surface-alpha: 0.06;
+    --surface-alpha-strong: 0.1;
+    --divider-alpha: 0.12;
 
     color-scheme: dark;
   }
@@ -48,32 +98,41 @@
     @apply pointer-events-none absolute inset-0;
   }
   .app-bg-grid {
-    @apply absolute inset-0 opacity-[0.45] [background-image:linear-gradient(to_right,rgba(255,255,255,0.06)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.06)_1px,transparent_1px)] [background-size:64px_64px];
+    @apply absolute inset-0 opacity-[0.55] [background-size:64px_64px];
+    background-image:
+      linear-gradient(to right, hsl(var(--grid-line) / var(--grid-alpha)) 1px, transparent 1px),
+      linear-gradient(to bottom, hsl(var(--grid-line) / var(--grid-alpha)) 1px, transparent 1px);
   }
   .app-bg-halo-left {
-    @apply absolute -left-48 -top-52 h-[520px] w-[520px] rounded-full bg-indigo-500/10 blur-3xl;
+    @apply absolute -left-48 -top-52 h-[520px] w-[520px] rounded-full blur-3xl;
+    background: hsl(var(--halo-indigo) / 0.12);
   }
   .app-bg-halo-right {
-    @apply absolute -bottom-60 right-[-140px] h-[640px] w-[640px] rounded-full bg-sky-500/10 blur-3xl;
+    @apply absolute -bottom-60 right-[-140px] h-[640px] w-[640px] rounded-full blur-3xl;
+    background: hsl(var(--halo-sky) / 0.12);
   }
   .app-bg-vignette {
-    @apply absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(255,255,255,0.07),transparent_55%)];
+    @apply absolute inset-0;
+    background: radial-gradient(ellipse at top, hsl(var(--foreground) / 0.06), transparent 55%);
   }
   .card {
-    @apply rounded-2xl border p-5 shadow-lg shadow-black/20;
-    background: hsl(var(--card) / 0.55);
+    @apply rounded-2xl border p-5;
+    background: hsl(var(--card) / 0.7);
     border-color: hsl(var(--border));
+    box-shadow: var(--elev-1);
   }
   .card-soft {
-    @apply rounded-3xl border p-6 shadow-xl shadow-black/25 backdrop-blur;
-    background: hsl(var(--card) / 0.6);
+    @apply rounded-3xl border p-6 shadow-xl backdrop-blur;
+    background: hsl(var(--soft-bg) / var(--soft-alpha));
     border-color: hsl(var(--border));
+    box-shadow: var(--elev-2);
   }
   .page-title {
     @apply text-xl font-semibold tracking-tight;
   }
   .page-subtitle {
-    @apply mt-1 text-sm text-slate-400;
+    @apply mt-1 text-sm;
+    color: hsl(var(--muted-foreground));
   }
   .page-actions {
     @apply flex flex-wrap items-center justify-end gap-2;
@@ -85,8 +144,24 @@
     @apply btn text-[hsl(var(--primary-foreground))];
     background: hsl(var(--primary));
   }
+  .btn-secondary {
+    @apply btn border;
+    background: hsl(var(--surface) / var(--surface-alpha));
+    border-color: hsl(var(--surface) / var(--divider-alpha));
+    color: hsl(var(--foreground));
+  }
+  .btn-secondary:hover {
+    background: hsl(var(--surface) / var(--surface-alpha-strong));
+  }
   .btn-ghost {
-    @apply btn bg-white/0 text-slate-100 hover:bg-white/10 active:bg-white/15;
+    @apply btn bg-white/0;
+    color: hsl(var(--foreground));
+  }
+  .btn-ghost:hover {
+    background: hsl(var(--surface) / var(--surface-alpha));
+  }
+  .btn-ghost:active {
+    background: hsl(var(--surface) / var(--surface-alpha-strong));
   }
   .btn-danger {
     @apply btn bg-red-500/15 text-red-200 hover:bg-red-500/20 active:bg-red-500/25;
@@ -104,7 +179,8 @@
     border-color: hsl(var(--ring) / 0.7);
   }
   .label {
-    @apply text-sm text-slate-300;
+    @apply text-sm;
+    color: hsl(var(--muted-foreground));
   }
   .badge {
     @apply inline-flex items-center rounded-full border px-2 py-0.5 text-xs;

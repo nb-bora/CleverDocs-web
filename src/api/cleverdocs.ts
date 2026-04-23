@@ -30,6 +30,7 @@ export type MembershipOut = { id: string; user_id: string; organization_id: stri
 export type UserOut = {
   id: string
   email: string
+  username: string | null
   display_name: string | null
   avatar_storage_key: string | null
   status: string
@@ -40,16 +41,20 @@ export type InvitationOut = {
   organization_id: string
   email: string
   role: string
+  status: string
   expires_at: string
   accepted_at: string | null
   revoked_at: string | null
+  created_by_user_id?: string | null
+  created_at?: string | null
 }
 
-export type CreateInvitationResponse = { invitation: InvitationOut; token: string }
+export type CreateInvitationResponse = { invitation: InvitationOut; accept_url: string }
 
 export type MeResponse = {
   user_id: string
   email: string
+  username?: string | null
   display_name?: string | null
   avatar_storage_key?: string | null
 }
@@ -57,6 +62,14 @@ export type MeResponse = {
 export const cleverdocs = {
   // auth
   me: () => apiFetch<MeResponse>('/v1/auth/me'),
+  updateMe: (body: { username?: string | null; display_name?: string | null }) =>
+    apiFetch<MeResponse>('/v1/users/me', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+  usernameAvailable: (username: string) =>
+    apiFetch<{ available: boolean }>(`/v1/users/username_available?username=${encodeURIComponent(username)}`),
   changePassword: (current_password: string, new_password: string) =>
     apiFetch('/v1/auth/me/change_password', {
       method: 'POST',
@@ -104,11 +117,11 @@ export const cleverdocs = {
   // members
   listMembers: (organizationId: string) =>
     apiFetch<MembershipOut[]>(`/v1/organizations/${organizationId}/members`),
-  addMember: (organizationId: string, user_email: string, role: string) =>
+  addMember: (organizationId: string, body: { user_email?: string; user_id?: string; username?: string; role: string }) =>
     apiFetch<MembershipOut>(`/v1/organizations/${organizationId}/members`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ user_email, role }),
+      body: JSON.stringify(body),
     }),
   updateMember: (organizationId: string, membershipId: string, body: { role?: string | null; status?: string | null }) =>
     apiFetch<MembershipOut>(`/v1/organizations/${organizationId}/members/${membershipId}`, {
@@ -136,18 +149,51 @@ export const cleverdocs = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, role }),
     }),
+  listInvitations: (args?: { status?: string; limit?: number; offset?: number }) => {
+    const qs = new URLSearchParams()
+    if (args?.status) qs.set('status', args.status)
+    if (args?.limit) qs.set('limit', String(args.limit))
+    if (args?.offset) qs.set('offset', String(args.offset))
+    const s = qs.toString()
+    const path = s ? `/v1/invitations?${s}` : '/v1/invitations'
+    return apiFetch<InvitationOut[]>(path)
+  },
+  revokeInvitation: (invitationId: string) => apiFetch(`/v1/invitations/${invitationId}/revoke`, { method: 'POST' }),
+  resendInvitation: (invitationId: string) =>
+    apiFetch<CreateInvitationResponse>(`/v1/invitations/${invitationId}/resend`, { method: 'POST' }),
   acceptInvitation: (token: string, password: string, display_name?: string) =>
     apiFetch('/v1/invitations/accept', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ token, password, display_name }),
     }),
-  revokeInvitation: (invitationId: string) => apiFetch(`/v1/invitations/${invitationId}/revoke`, { method: 'POST' }),
+  acceptInvitationLoggedIn: (token: string) =>
+    apiFetch('/v1/invitations/accept_logged_in', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token }),
+    }),
+  declineInvitation: (token: string) =>
+    apiFetch('/v1/invitations/decline', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token }),
+    }),
+
+  // users directory (org-scoped)
+  directory: (q: string, limit = 10) =>
+    apiFetch<UserOut[]>(`/v1/users/directory?q=${encodeURIComponent(q)}&limit=${encodeURIComponent(String(limit))}`),
 
   // documents
-  listDocuments: (include_archived: boolean) =>
-    apiFetch<DocumentOut[]>(`/v1/documents?include_archived=${include_archived ? 'true' : 'false'}`),
-  listMyDocumentsGrouped: () => apiFetch<any>('/v1/documents/mine'),
+  listDocuments: (args: { include_archived: boolean; q?: string; status?: string; sort?: string; limit?: number }) => {
+    const qs = new URLSearchParams()
+    qs.set('include_archived', args.include_archived ? 'true' : 'false')
+    if (args.q) qs.set('q', args.q)
+    if (args.status) qs.set('status', args.status)
+    if (args.sort) qs.set('sort', args.sort)
+    if (args.limit) qs.set('limit', String(args.limit))
+    return apiFetch<DocumentOut[]>(`/v1/documents?${qs.toString()}`)
+  },
   uploadDocument: async (file: File) => {
     const fd = new FormData()
     fd.append('file', file)
@@ -161,9 +207,6 @@ export const cleverdocs = {
     if (!res.ok) throw new ApiError(res.status, 'Upload failed', data)
     return data as UploadDocumentResponse
   },
-  getDocument: (documentId: string) => apiFetch<DocumentOut>(`/v1/documents/${documentId}`),
-  renameDocument: (documentId: string, filename: string) =>
-    apiFetch<DocumentOut>(`/v1/documents/${documentId}?filename=${encodeURIComponent(filename)}`, { method: 'PATCH' }),
   deleteDocument: (documentId: string) => apiFetch(`/v1/documents/${documentId}`, { method: 'DELETE' }),
   archiveDocument: (documentId: string) => apiFetch<DocumentOut>(`/v1/documents/${documentId}/archive`, { method: 'POST' }),
   unarchiveDocument: (documentId: string) =>
@@ -171,45 +214,10 @@ export const cleverdocs = {
   processDocument: (documentId: string) =>
     apiFetch<ProcessDocumentResponse>(`/v1/documents/${documentId}/process`, { method: 'POST' }),
   reindexDocument: (documentId: string) => apiFetch(`/v1/documents/${documentId}/reindex`, { method: 'POST' }),
-  addDocumentVersion: async (documentId: string, file: File) => {
-    const fd = new FormData()
-    fd.append('file', file)
-    const res = await fetch(`${apiBaseUrl()}/v1/documents/${documentId}/versions`, {
-      method: 'POST',
-      headers: buildAuthHeaders(),
-      body: fd,
-    })
-    const ct = res.headers.get('content-type') || ''
-    const data = ct.includes('application/json') ? await res.json() : null
-    if (!res.ok) throw new ApiError(res.status, 'Version upload failed', data)
-    return data as DocumentOut
-  },
   downloadDocumentUrl: (documentId: string) => `${apiBaseUrl()}/v1/documents/${documentId}/file`,
 
   // search
   search: (q: string) => apiFetch<SearchResponse>(`/v1/search?q=${encodeURIComponent(q)}`),
   searchMine: (q: string) => apiFetch<SearchResponse>(`/v1/search/mine?q=${encodeURIComponent(q)}`),
-
-  // jobs
-  listJobs: (limit: number) => apiFetch<any[]>(`/v1/jobs?limit=${limit}`),
-  getJob: (jobId: string) => apiFetch<any>(`/v1/jobs/${jobId}`),
-  cancelJob: (jobId: string) => apiFetch(`/v1/jobs/${jobId}/cancel`, { method: 'POST' }),
-  retryJob: (jobId: string, reset_attempts: boolean) =>
-    apiFetch(`/v1/jobs/${jobId}/retry?reset_attempts=${reset_attempts ? 'true' : 'false'}`, { method: 'POST' }),
-  retryFailedJobs: (type: string | null, limit: number, reset_attempts: boolean) => {
-    const qs = new URLSearchParams()
-    if (type) qs.set('type', type)
-    qs.set('limit', String(limit))
-    qs.set('reset_attempts', reset_attempts ? 'true' : 'false')
-    return apiFetch(`/v1/jobs/retry_failed?${qs.toString()}`, { method: 'POST' })
-  },
-  listDeadJobs: (limit: number) => apiFetch<any[]>(`/v1/jobs/dead?limit=${limit}`),
-  retryDeadJobs: (type: string | null, limit: number, reset_attempts: boolean) => {
-    const qs = new URLSearchParams()
-    if (type) qs.set('type', type)
-    qs.set('limit', String(limit))
-    qs.set('reset_attempts', reset_attempts ? 'true' : 'false')
-    return apiFetch(`/v1/jobs/retry_dead?${qs.toString()}`, { method: 'POST' })
-  },
 }
 

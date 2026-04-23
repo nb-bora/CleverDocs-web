@@ -5,8 +5,11 @@ import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import { BrowserRouter } from 'react-router-dom'
 import './index.css'
 import App from './App.tsx'
+import { initTheme } from './lib/theme'
 
 const queryClient = new QueryClient()
+
+initTheme()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
