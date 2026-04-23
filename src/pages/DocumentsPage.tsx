@@ -291,6 +291,7 @@ export function DocumentsPage() {
 function DocumentRow(props: Readonly<{ doc: DocumentOut; meUserId: string | null; onChanged: () => void }>) {
   const d = props.doc
   const isUploader = Boolean(props.meUserId && d.uploaded_by_user_id && props.meUserId === d.uploaded_by_user_id)
+  const canShowOcr = d.status === 'uploaded' || d.status === 'processing'
 
   const archive = useMutation({
     mutationFn: async () => cleverdocs.archiveDocument(d.id),
@@ -326,6 +327,22 @@ function DocumentRow(props: Readonly<{ doc: DocumentOut; meUserId: string | null
     },
     onError: (e) => toast({ kind: 'error', title: 'Reindex', message: e instanceof ApiError ? `Erreur (${e.status})` : 'Erreur' }),
   })
+
+  const archiveItem = useMemo(() => {
+    if (!isUploader) return null
+    if (d.status === 'archived') {
+      return (
+        <DropdownItem disabled={unarchive.isPending} onClick={() => unarchive.mutate()}>
+          Désarchiver
+        </DropdownItem>
+      )
+    }
+    return (
+      <DropdownItem disabled={archive.isPending} onClick={() => archive.mutate()}>
+        Archiver
+      </DropdownItem>
+    )
+  }, [archive.isPending, archive, d.status, isUploader, unarchive.isPending, unarchive])
 
   return (
     <div
@@ -380,7 +397,7 @@ function DocumentRow(props: Readonly<{ doc: DocumentOut; meUserId: string | null
             >
               Télécharger
             </DropdownItem>
-            {d.status === 'uploaded' || d.status === 'processing' ? (
+            {canShowOcr ? (
               <DropdownItem disabled={process.isPending} onClick={() => process.mutate()}>
                 OCR
               </DropdownItem>
@@ -388,17 +405,7 @@ function DocumentRow(props: Readonly<{ doc: DocumentOut; meUserId: string | null
             <DropdownItem disabled={reindex.isPending} onClick={() => reindex.mutate()}>
               Reindex
             </DropdownItem>
-            {isUploader ? (
-              d.status === 'archived' ? (
-                <DropdownItem disabled={unarchive.isPending} onClick={() => unarchive.mutate()}>
-                  Désarchiver
-                </DropdownItem>
-              ) : (
-                <DropdownItem disabled={archive.isPending} onClick={() => archive.mutate()}>
-                  Archiver
-                </DropdownItem>
-              )
-            ) : null}
+            {archiveItem}
             <div className="my-1 h-px" style={{ background: 'hsl(var(--surface) / var(--divider-alpha))' }} />
             {isUploader ? (
               <ConfirmButton
