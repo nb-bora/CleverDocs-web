@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "gen:api": "openapi-typescript http://127.0.0.1:8000/openapi.json -o src/api/openapi.ts",
+    "gen:api": "openapi-typescript https://briceincode-cleverdocs.hf.space/openapi.json -o src/api/openapi.ts",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview"
